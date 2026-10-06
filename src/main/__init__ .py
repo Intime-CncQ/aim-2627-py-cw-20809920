@@ -35,29 +35,129 @@ class Facing(Enum):
 # Q1 机器人自检（题面 Q1·自检状态计算与报告生成）
 # ---------------------------------------------------------------------------
 def hp_ratio(hp, max_hp):
-    """TODO(Q1)：血量百分比，返回 0-100 的 int；计算与边界规则见题面 Q1 规范。"""
-    raise NotImplementedError("Q1 hp_ratio：题面 Q1·血量百分比与精度保障")
-
+    if max_hp <= 0:
+        return 0
+    ratio = (hp*100) / max_hp
+    return max(0, min(100, round(ratio)))
 
 def status_report(name, robot_type, hp, max_hp, battery):
-    """TODO(Q1)：一行自检报告字符串；档位判定与逐字符格式见题面 Q1 规范。"""
-    raise NotImplementedError("Q1 status_report：题面 Q1·电量映射与报告格式")
-
+    hp_pct = hp_ratio(hp, max_hp)
+    if battery < 20:
+        battery_status = "LOW"
+    elif battery < 60:
+        battery_status = "WARNING"
+    else:
+        battery_status = "OK"
+    return f"{name:<10}| {robot_type:<9}|HP {hp_pct:>3}%|BAT {battery:>3}%|{battery_status}"
 
 # ---------------------------------------------------------------------------
 # Q2 战斗日志分析（题面 Q2·多源日志解析与统计）
 # ---------------------------------------------------------------------------
+import json
+
 def analyze_damage_log(lines):
-    """TODO(Q2)：解析混合格式伤害日志，返回固定契约的统计 dict；
-    行格式、去重与统计口径见题面 Q2 规范。"""
-    raise NotImplementedError("Q2 analyze_damage_log：题面 Q2·多源日志解析与统计")
+    total = 0
+    by_armor = {"front": 0, "left": 0, "right": 0}
+    seen_ids = set()
+    event_count = 0
+
+    def normalize_armor(value):
+        if value is None:
+            return None
+        key = str(value).strip().lower()
+        mapping = {
+            "front": "front",
+            "f": "front",
+            "left": "left",
+            "l": "left",
+            "right": "right",
+            "r": "right",
+        }
+        return mapping.get(key)
+
+    def parse_damage(value):
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            if isinstance(value, (int, float)):
+                number = float(value)
+            else:
+                number = float(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+        if number <= 0:
+            return None
+        if number.is_integer():
+            return int(number)
+        return None
+
+    for raw in lines:
+        line = str(raw).strip()
+        if not line or line.startswith("#"):
+            continue
+
+        if line.startswith("{"):
+            try:
+                data = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(data, dict):
+                continue
+
+            armor = normalize_armor(data.get("armor"))
+            damage = parse_damage(data.get("damage"))
+            if armor is None or damage is None:
+                continue
+
+            event_id = data.get("id")
+            if event_id is not None:
+                if event_id in seen_ids:
+                    continue
+                seen_ids.add(event_id)
+
+            total += damage
+            by_armor[armor] += damage
+            event_count += 1
+            continue
+
+        for part in line.split(","):
+            if ":" not in part:
+                continue
+            key, val = part.split(":", 1)
+            armor = normalize_armor(key.strip())
+            damage = parse_damage(val.strip())
+            if armor is None or damage is None:
+                continue
+
+            total += damage
+            by_armor[armor] += damage
+            event_count += 1
+
+    if event_count == 0:
+        return {
+            "total": 0,
+            "by_armor": {"front": 0, "left": 0, "right": 0},
+            "most_hit": None,
+            "avg": 0.0,
+        }
+
+    most_hit = max(by_armor, key=by_armor.get)
+    if by_armor[most_hit] == 0:
+        most_hit = None
+
+    return {
+        "total": total,
+        "by_armor": by_armor,
+        "most_hit": most_hit,
+        "avg": total / event_count,
+    }
 
 
 # ---------------------------------------------------------------------------
 # Q3 SentryGrid（题面 Q3·载体物理规则）
 # ---------------------------------------------------------------------------
 class SentryGrid:
-    """哨兵仿真载体（构造与只读属性已提供；四个 TODO 方法由你实现）。"""
 
     def __init__(self, width, height, obstacles, enemy_pos,
                  start_pos=(0, 0), facing=Facing.UP, fuel=100):
@@ -139,30 +239,86 @@ class SentryGrid:
 
     @current_pos.setter
     def current_pos(self, value):
-        """TODO(Q3)：位置 setter；三重输入校验见题面 Q3 规范第 1 条。"""
-        raise NotImplementedError("Q3 current_pos.setter：题面 Q3·位置校验三步")
+        if not isinstance(value, (tuple, list)) or len(value) != 2:
+            raise TypeError("current_pos 需要长度为 2 的 tuple/list")
+        x = int(value[0])
+        y = int(value[1])
+        if not (0 <= x < self._width and 0 <= y < self._height):
+            raise ValueError("current_pos 越界")
+        if (x, y) in self._obstacles:
+            raise ValueError("current_pos 不能位于障碍物上")
+        self._pos = (x, y)
 
     def move_forward(self):
-        """TODO(Q3)：朝当前 facing 前进一格，返回执行后的位置；
-        碰撞、耗电与断电语义见题面 Q3 规范。"""
-        raise NotImplementedError("Q3 move_forward：题面 Q3·前进、碰撞与断电")
+        if self._fuel <= 0:
+            return self._pos
+
+        dx, dy = self._facing.delta
+        nx = self._pos[0] + dx
+        ny = self._pos[1] + dy
+
+        if self.is_blocked(nx, ny):
+            self._collision_count += 1
+            return self._pos
+
+        self._pos = (nx, ny)
+        self._fuel -= 1
+        return self._pos
 
     def turn_left(self):
-        """TODO(Q3)：原地左转 90°，返回新的 Facing（不耗电）。"""
-        raise NotImplementedError("Q3 turn_left")
+        """原地左转 90°,返回新的 Facing(不耗电)。"""
+        order = [Facing.UP, Facing.LEFT, Facing.DOWN, Facing.RIGHT]
+        idx = order.index(self._facing)
+        self._facing = order[(idx + 1) % 4]
+        return self._facing
 
     def turn_right(self):
-        """TODO(Q3)：原地右转 90°，返回新的 Facing（不耗电）。"""
-        raise NotImplementedError("Q3 turn_right")
+        """原地右转 90°,返回新的 Facing(不耗电)。"""
+        order = [Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT]
+        idx = order.index(self._facing)
+        self._facing = order[(idx + 1) % 4]
+        return self._facing
 
 
 # ---------------------------------------------------------------------------
 # Q4 贪心导航（题面 Q4·单步贪心导航策略）
 # ---------------------------------------------------------------------------
 def next_step_toward(pos, target, obstacles, current_facing=Facing.UP):
-    """TODO(Q4)：返回下一步应朝向的 Facing；
-    候选判定、优先级与回退规则见题面 Q4 规范。"""
-    raise NotImplementedError("Q4 next_step_toward：题面 Q4·贪心策略与回退")
+    """返回下一步应朝向的 Facing。"""
+    if pos == target:
+        return current_facing
+
+    x, y = pos
+    tx, ty = target
+    obstacles = set(obstacles)
+
+    def is_valid(direction):
+        nx = x + direction.delta[0]
+        ny = y + direction.delta[1]
+        if (nx, ny) in obstacles:
+            return False
+        return abs(nx - tx) + abs(ny - ty) < abs(x - tx) + abs(y - ty)
+
+    if abs(tx - x) >= abs(ty - y):
+        priority = [
+            Facing.RIGHT if tx > x else Facing.LEFT,
+            Facing.UP if ty > y else Facing.DOWN,
+        ]
+    else:
+        priority = [
+            Facing.UP if ty > y else Facing.DOWN,
+            Facing.RIGHT if tx > x else Facing.LEFT,
+        ]
+
+    for direction in priority:
+        if is_valid(direction):
+            return direction
+
+    for direction in [Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT]:
+        if is_valid(direction):
+            return direction
+
+    return current_facing
 
 
 # ---------------------------------------------------------------------------

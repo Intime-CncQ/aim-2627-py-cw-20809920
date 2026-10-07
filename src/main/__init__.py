@@ -429,22 +429,112 @@ def decide(sensor, state, hp, heat):
 # ---------------------------------------------------------------------------
 # Q6 巡逻任务（题面 Q6·巡逻契约与验收阈值）
 # ---------------------------------------------------------------------------
+from collections import deque
+
 def run_patrol(grid, max_steps=500):
-    """TODO(Q6)：sense → decide → act 主循环；
-    循环结构、终止条件、脱困自由度与统计返回契约见题面 Q6 规范。"""
-    raise NotImplementedError("Q6 run_patrol：题面 Q6·主循环与统计契约")
+    steps = 0
+    collisions_before = grid.collision_count
+    visited = {grid.current_pos}
+
+# 辅助函数：获取当前朝向的下一个位置
+    def get_right(facing):
+        order = [Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT]
+        return order[(order.index(facing) + 1) % 4]
+
+    def get_left(facing):
+        order = [Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT]
+        return order[(order.index(facing) - 1) % 4]
+
+    while steps < max_steps:
+    #终止条件检查
+        if grid.found_enemy:
+            break
+        if grid.fuel <= 0:
+            break
+
+        # 感知与决策
+        target = grid.enemy_pos
+        pos = grid.current_pos
+        obstacles = grid.obstacles
+
+        next_dir = next_step_toward(pos, target, obstacles, grid.facing)
+
+        # 脱困策略
+        if next_dir == grid.facing:
+        # 右手法则：右 -> 直 -> 左 -> 掉头
+            right_f = get_right(grid.facing)
+            right_pos = (pos[0] + right_f.delta[0], pos[1] + right_f.delta[1])
+
+            straight_pos = (pos[0] + grid.facing.delta[0], pos[1] + grid.facing.delta[1])
+
+            left_f = get_left(grid.facing)
+            left_pos = (pos[0] + left_f.delta[0], pos[1] + left_f.delta[1])
+
+        # 用 grid.is_blocked 检查四个方向，找到第一个能走的
+            if not grid.is_blocked(right_pos[0], right_pos[1]):
+                next_dir = right_f       # 右边能走，转右
+            elif not grid.is_blocked(straight_pos[0], straight_pos[1]):
+                next_dir = grid.facing   # 直走能走，直走
+            elif not grid.is_blocked(left_pos[0], left_pos[1]):
+                next_dir = left_f        # 左边能走，转左
+            else:
+                next_dir = get_left(get_left(grid.facing)) # 四面楚歌，只能掉头
+
+        # 行动
+        while grid.facing != next_dir:
+            grid.turn_right()
+
+        # 执行移动并更新统计
+        grid.move_forward()
+        steps += 1
+        visited.add(grid.current_pos)
+
+    # 计算并返回契约要求的统计字典
+    collisions = grid.collision_count - collisions_before
+    found = grid.found_enemy
+    return {
+        "steps": steps,
+        "collisions": collisions,
+        "visited_count": len(visited),
+        "found_enemy": found,
+        "success": found,
+    }
+
+
 
 
 def report_to_json(stats):
-    """TODO(Q6)：把 stats 序列化为确定性的 JSON 字符串，见题面 Q6 规范。"""
-    raise NotImplementedError("Q6 report_to_json：题面 Q6·报告序列化")
+    # sort_keys=True 保证键的顺序一致，ensure_ascii=False 保留非 ASCII 字符
+    return json.dumps(stats, sort_keys=True, ensure_ascii=False)
 
+def bfs_path_length(start, target, obstacles):
+    if start == target:
+        return 0
+
+    queue = deque([(start, 0)])
+    visited = {start}
+
+    while queue:
+        (x, y), dist = queue.popleft()
+
+        # 四邻域遍历
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            nx, ny = x + dx, y + dy
+
+            # obstacles 由调用方负责包含地图边界
+            if (nx, ny) not in visited and (nx, ny) not in obstacles:
+                if (nx, ny) == target:
+                    return dist + 1
+                visited.add((nx, ny))
+                queue.append(((nx, ny), dist + 1))
+
+    return -1  # 不可达
 
 # ---------------------------------------------------------------------------
 # Bonus：BFS 全局最短路（题面 Bonus·BFS 语义与排行榜）
 # ---------------------------------------------------------------------------
 def bfs_path_length(start, target, obstacles):
-    """TODO(Bonus)：BFS 全局最短路步数；返回语义与边界职责见题面 Bonus 规范。"""
+    """TODO(Bonus): BFS 全局最短路步数；返回语义与边界职责见题面 Bonus 规范。"""
     raise NotImplementedError("Bonus bfs_path_length")
 
 

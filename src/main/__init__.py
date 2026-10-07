@@ -49,7 +49,7 @@ def status_report(name, robot_type, hp, max_hp, battery):
         battery_status = "WARNING"
     else:
         battery_status = "OK"
-    return (f"{name:<10}|{robot_type:^10}|HP {hp_pct:>3}%|"
+    return (f"{name:<10}| {robot_type} |HP {hp_pct:>3}%|"
             f"BAT {battery:>3}%|{battery_status}")
 
 # ---------------------------------------------------------------------------
@@ -58,102 +58,77 @@ def status_report(name, robot_type, hp, max_hp, battery):
 import json
 
 def analyze_damage_log(lines):
+    # 初始化统计变量
     total = 0
     by_armor = {"front": 0, "left": 0, "right": 0}
-    seen_ids = set()
-    event_count = 0
-
-    def normalize_armor(value):
-        if value is None:
-            return None
-        key = str(value).strip().lower()
-        mapping = {
-            "front": "front",
-            "f": "front",
-            "left": "left",
-            "l": "left",
-            "right": "right",
-            "r": "right",
-        }
-        return mapping.get(key)
-
-    def parse_damage(value):
-        if value is None or isinstance(value, bool):
-            return None
-        try:
-            if isinstance(value, (int, float)):
-                number = float(value)
-            else:
-                number = float(str(value).strip())
-        except (TypeError, ValueError):
-            return None
-
-        if number <= 0:
-            return None
-        if number.is_integer():
-            return int(number)
-        return None
-
-    for raw in lines:
-        line = str(raw).strip()
+    seen_ids = set()  # 用来记录已经出现过的 id，实现去重
+    event_count = 0   # 记录有效事件的数量，用于计算平均值
+    
+    # 开始逐行遍历
+    for line in lines:
+        line = line.strip()
         if not line or line.startswith("#"):
             continue
-
+        
+        # 处理 JSON 格式的行 (以 { 开头)
         if line.startswith("{"):
             try:
                 data = json.loads(line)
+                armor = data.get("armor")
+                damage = data.get("damage")
+                
+                if armor not in ["front", "left", "right"]:
+                    continue
+                if not isinstance(damage, int) or isinstance(damage, bool) or damage <= 0:
+                    continue
+
+                event_id = data.get("id")
+                if event_id is not None:
+                    if event_id in seen_ids:
+                        continue 
+                    seen_ids.add(event_id)
+
+                total += damage
+                by_armor[armor] += damage
+                event_count += 1
+                
             except Exception:
                 continue
-            if not isinstance(data, dict):
-                continue
-
-            armor = normalize_armor(data.get("armor"))
-            damage = parse_damage(data.get("damage"))
-            if armor is None or damage is None:
-                continue
-
-            event_id = data.get("id")
-            if event_id is not None:
-                if event_id in seen_ids:
+                
+        # 处理传感器格式的行 
+        else:
+            parts = line.split(",")
+            valid_parts = []  # 暂存这条行里合法的部位和伤害
+            
+            for part in parts:
+                if ":" not in part:
                     continue
-                seen_ids.add(event_id)
+                key, val = part.split(":", 1)
+                key = key.strip()
+                val = val.strip()
 
-            total += damage
-            by_armor[armor] += damage
-            event_count += 1
-            continue
+                if key not in ["F", "L", "R"]:
+                    continue
+                if not val.isdigit() or int(val) <= 0:
+                    continue
+ 
+                armor_map = {"F": "front", "L": "left", "R": "right"}
+                valid_parts.append((armor_map[key], int(val)))
 
-        for part in line.split(","):
-            if ":" not in part:
-                continue
-            key, val = part.split(":", 1)
-            armor = normalize_armor(key.strip())
-            damage = parse_damage(val.strip())
-            if armor is None or damage is None:
-                continue
+            for armor, damage in valid_parts:
+                total += damage
+                by_armor[armor] += damage
+                event_count += 1
 
-            total += damage
-            by_armor[armor] += damage
-            event_count += 1
-
+    # 计算最终结果
     if event_count == 0:
-        return {
-            "total": 0,
-            "by_armor": {"front": 0, "left": 0, "right": 0},
-            "most_hit": None,
-            "avg": 0.0,
-        }
-
-    most_hit = max(by_armor, key=by_armor.get)
-    if by_armor[most_hit] == 0:
         most_hit = None
-
-    return {
-        "total": total,
-        "by_armor": by_armor,
-        "most_hit": most_hit,
-        "avg": total / event_count,
-    }
+        avg = 0.0  # 空日志返回 0.0
+    else:
+        most_hit = max(by_armor, key=by_armor.get)
+        avg = round(total / event_count, 2)
+        
+    return {"total": total, "by_armor": by_armor, "most_hit": most_hit, "avg": avg}
 
 
 # ---------------------------------------------------------------------------
@@ -337,9 +312,79 @@ class SentryState(Enum):
 
 
 def decide(sensor, state, hp, heat):
-    """TODO(Q5)：纯函数决策，返回 (action: str, new_state: SentryState)；
-    sensor 字段契约、R1-R7 规则表与非法输入处理见题面 Q5 规范。"""
-    raise NotImplementedError("Q5 decide：题面 Q5·决策规则表 R1-R7")
+
+    #非法输入检查
+    if not isinstance(sensor, dict):
+        raise TypeError("sensor 必须是字典")
+    for key in ["enemy_frames", "enemy_dist", "robot_type", "max_hp"]:
+        if key not in sensor:
+            raise KeyError(f"sensor 缺少键 {key}")
+
+    enemy_frames = sensor["enemy_frames"]
+    if not isinstance(enemy_frames, (tuple, list)) or len(enemy_frames) == 0 or len(enemy_frames) > 6:
+        raise ValueError("enemy_frames 必须为长度1-6的序列")
+    if not isinstance(state, SentryState):
+        raise ValueError("state 必须是 SentryState 成员")
+
+    #输入规范化
+    frames = [bool(x) for x in enemy_frames]
+    visible = frames[-1] 
+
+    enemy_dist = sensor.get("enemy_dist")
+    if not isinstance(enemy_dist, int) or isinstance(enemy_dist, bool):
+        enemy_dist = 9999
+
+    robot_type = sensor.get("robot_type")
+    if robot_type not in ("INFANTRY", "HERO"):
+        robot_type = "INFANTRY"
+
+    max_hp = sensor.get("max_hp")
+    if not isinstance(max_hp, int) or max_hp <= 0:
+        max_hp = 100
+    hp_pct = (hp * 100) // max_hp
+    hp_pct = max(0, min(100, hp_pct))
+
+    #规则 R1-R7
+    if hp_pct <= 30:
+        return ("RETREAT", SentryState.RETREAT)
+    if state == SentryState.RETREAT:
+        if hp_pct > 30:
+            return ("RETURN", SentryState.RETURN)
+        else:
+            return ("RETREAT", SentryState.RETREAT)
+    if state == SentryState.RETURN:
+        return ("MOVE_BASE", SentryState.PATROL)
+    if state == SentryState.ENGAGE and visible:
+        if enemy_dist <= 3:
+            return ("SHOOT", SentryState.ENGAGE)
+        else:
+            if robot_type == "HERO":
+                return ("MOVE_RIGHT", SentryState.ENGAGE)
+            else:
+                return ("MOVE_LEFT", SentryState.ENGAGE)
+    if state == SentryState.ENGAGE and not visible:
+        if any(frames):
+            return ("HOLD_FIRE", SentryState.ENGAGE)
+        else:
+            return ("SCAN", SentryState.SUSPECT)
+    if state in (SentryState.PATROL, SentryState.SUSPECT) and visible:
+        if len(frames) >= 2 and frames[-1] and frames[-2]:
+            if enemy_dist <= 3:
+                return ("SHOOT", SentryState.ENGAGE)
+            else:
+                if robot_type == "HERO":
+                    return ("MOVE_RIGHT", SentryState.ENGAGE)
+                else:
+                    return ("MOVE_LEFT", SentryState.ENGAGE)
+        else:
+            return ("SCAN", SentryState.SUSPECT)
+    if state in (SentryState.PATROL, SentryState.SUSPECT) and not visible:
+        if state == SentryState.PATROL:
+            return ("PATROL_MOVE", SentryState.PATROL)
+        else:
+            return ("SCAN", SentryState.SUSPECT)
+
+    return ("SCAN", SentryState.SUSPECT)
 
 
 # ---------------------------------------------------------------------------

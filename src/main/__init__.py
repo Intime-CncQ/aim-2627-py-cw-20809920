@@ -58,77 +58,112 @@ def status_report(name, robot_type, hp, max_hp, battery):
 import json
 
 def analyze_damage_log(lines):
+
     # 初始化统计变量
     total = 0
     by_armor = {"front": 0, "left": 0, "right": 0}
-    seen_ids = set()  # 用来记录已经出现过的 id，实现去重
-    event_count = 0   # 记录有效事件的数量，用于计算平均值
-    
-    # 开始逐行遍历
-    for line in lines:
-        if not isinstance(line, str):
+    seen_ids = set()  #记录已经出现过的id，避免重复计数
+    event_count = 0   #记录有效事件的数量
+    sensor_armor = {"F": "front", "L": "left", "R": "right"}
+
+    def reject_json_constant(value):
+        raise ValueError(value)
+
+    try:
+        line_iterator = iter(lines)
+    except Exception:
+        line_iterator = iter(())
+
+    while True:
+        try:
+            raw_line = next(line_iterator)
+        except StopIteration:
+            break
+        except Exception:
+            break
+
+        if not isinstance(raw_line, str):
             continue
-        
-        # 处理 JSON 格式的行
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+    # 处理 JSON 格式的行
         if line.startswith("{"):
             try:
-                data = json.loads(line)
-                armor = data.get("armor")
-                damage = data.get("damage")
-                
-                if armor not in ["front", "left", "right"]:
-                    continue
-                if not isinstance(damage, int) or isinstance(damage, bool) or damage <= 0:
-                    continue
-
-                if "id" in data:
-                    id_key = str(data["id"]) # 统一转字符串，避免 list 等不可哈希类型报错
-                    if id_key in seen_ids:
-                        continue
-                    seen_ids.add(id_key)
-
-                total += damage
-                by_armor[armor] += damage
-                event_count += 1
-                
+                data = json.loads(line, parse_constant=reject_json_constant)
             except Exception:
                 continue
-                
-        # 处理传感器格式的行 
-        else:
-            parts = line.split(",")
-            temp_events = [] 
-            is_valid_line = True
-            
-            for part in parts:
-                if ":" not in part:
-                    continue
-                key, val = part.split(":", 1)
-                key = key.strip()
-                val = val.strip()
+            if not isinstance(data, dict):
+                continue
 
-                if key not in ["F", "L", "R"]:
-                    continue
-                if not val.isdigit() or int(val) <= 0:
-                    continue
- 
-                armor_map = {"F": "front", "L": "left", "R": "right"}
-                temp_events.append((armor_map[key], int(val)))
+            armor = data.get("armor")
+            damage = data.get("damage")
+            if (not isinstance(armor, str) or armor not in by_armor
+                    or type(damage) is not int or damage <= 0):
+                continue
 
-            for armor, damage in temp_events:
-                total += damage
-                by_armor[armor] += damage
-                event_count += 1
+            if "id" in data:
+                try:
+                    id_key = json.dumps(
+                        data["id"], sort_keys=True, separators=(",", ":"),
+                        allow_nan=False,
+                    )
+                except Exception:
+                    continue
+                if id_key in seen_ids:
+                    continue
+                seen_ids.add(id_key)
+
+            total += damage
+            by_armor[armor] += damage
+            event_count += 1
+            continue
+
+        temp_events = []
+        is_valid_line = True
+
+        # 处理传感器格式的行
+        for part in line.split(","):
+            if part.count(":") != 1:
+                is_valid_line = False
+                break
+            key, value = (field.strip() for field in part.split(":"))
+            if (key not in sensor_armor or not value.isascii()
+                    or not value.isdecimal()):
+                is_valid_line = False
+                break
+            try:
+                damage = int(value)
+            except (ValueError, OverflowError):
+                is_valid_line = False
+                break
+            if damage <= 0:
+                is_valid_line = False
+                break
+            temp_events.append((sensor_armor[key], damage))
+
+        if not is_valid_line or not temp_events:
+            continue
+        for armor, damage in temp_events:
+            total += damage
+            by_armor[armor] += damage
+            event_count += 1
 
     # 计算最终结果
     if event_count == 0:
         most_hit = None
-        avg = 0.0  # 空日志返回 0.0
+        avg = 0.0
     else:
         most_hit = max(by_armor, key=by_armor.get)
         avg = round(total / event_count, 2)
-        
-    return {"total": total, "by_armor": by_armor, "most_hit": most_hit, "avg": avg}
+
+    return {
+        "total": total,
+        "by_armor": by_armor,
+        "most_hit": most_hit,
+        "avg": avg,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +177,7 @@ class SentryGrid:
         self._height = int(height)
         if self._width <= 0 or self._height <= 0:
             raise ValueError("地图尺寸必须为正")
-        # 障碍坐标存入 set，查询 O(1)——已有实现，勿改。
+        # 障碍坐标存入 set，查询 O(1)
         self._obstacles = set()
         for ob in obstacles:
             x, y = ob

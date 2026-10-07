@@ -350,33 +350,37 @@ def decide(sensor, state, hp, heat):
 
     #非法输入检查
     if not isinstance(sensor, dict):
-        raise TypeError("sensor 必须是字典")
-    for key in ["enemy_frames", "enemy_dist", "robot_type", "max_hp"]:
-        if key not in sensor:
-            raise KeyError(f"sensor 缺少键 {key}")
+        raise ValueError("sensor 必须是字典")
+    required_fields = ["enemy_frames", "enemy_dist", "robot_type", "max_hp"]
+    for field in required_fields:
+        if field not in sensor:
+            raise ValueError(f"sensor 缺少字段: {field}")
 
     enemy_frames = sensor["enemy_frames"]
     if not isinstance(enemy_frames, (tuple, list)) or len(enemy_frames) == 0 or len(enemy_frames) > 6:
-        raise ValueError("enemy_frames 必须为长度1-6的序列")
+        raise ValueError("enemy_frames 必须为长度 1-6 的序列")
     if not isinstance(state, SentryState):
-        raise ValueError("state 必须是 SentryState 成员")
+        raise ValueError("state 必须为 SentryState 成员")
 
     #输入规范化
     frames = [bool(x) for x in enemy_frames]
     visible = frames[-1] 
 
-    enemy_dist = sensor.get("enemy_dist")
-    if not isinstance(enemy_dist, int) or isinstance(enemy_dist, bool):
+    enemy_dist = sensor["enemy_dist"]
+    if isinstance(enemy_dist, bool) or not isinstance(enemy_dist, int):
         enemy_dist = 9999
 
-    robot_type = sensor.get("robot_type")
+    robot_type = sensor["robot_type"]
     if robot_type not in ("INFANTRY", "HERO"):
         robot_type = "INFANTRY"
 
-    max_hp = sensor.get("max_hp")
-    if not isinstance(max_hp, int) or max_hp <= 0:
+    max_hp = sensor["max_hp"]
+    if isinstance(max_hp, bool) or not isinstance(max_hp, int) or max_hp <= 0:
         max_hp = 100
-    hp_pct = (hp * 100) // max_hp
+
+    if isinstance(hp, bool) or not isinstance(hp, (int, float)):
+        hp = 0    
+    hp_pct = int((hp * 100) // max_hp)
     hp_pct = max(0, min(100, hp_pct))
 
     #规则 R1-R7
@@ -398,7 +402,7 @@ def decide(sensor, state, hp, heat):
             else:
                 return ("MOVE_LEFT", SentryState.ENGAGE)
     if state == SentryState.ENGAGE and not visible:
-        if any(frames):
+        if len(frames) >= 2 and frames[-2]:
             return ("HOLD_FIRE", SentryState.ENGAGE)
         else:
             return ("SCAN", SentryState.SUSPECT)

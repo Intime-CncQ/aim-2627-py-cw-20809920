@@ -66,11 +66,10 @@ def analyze_damage_log(lines):
     
     # 开始逐行遍历
     for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
+        if not isinstance(line, str):
             continue
         
-        # 处理 JSON 格式的行 (以 { 开头)
+        # 处理 JSON 格式的行
         if line.startswith("{"):
             try:
                 data = json.loads(line)
@@ -82,11 +81,11 @@ def analyze_damage_log(lines):
                 if not isinstance(damage, int) or isinstance(damage, bool) or damage <= 0:
                     continue
 
-                event_id = data.get("id")
-                if event_id is not None:
-                    if event_id in seen_ids:
-                        continue 
-                    seen_ids.add(event_id)
+                if "id" in data:
+                    id_key = str(data["id"]) # 统一转字符串，避免 list 等不可哈希类型报错
+                    if id_key in seen_ids:
+                        continue
+                    seen_ids.add(id_key)
 
                 total += damage
                 by_armor[armor] += damage
@@ -98,7 +97,8 @@ def analyze_damage_log(lines):
         # 处理传感器格式的行 
         else:
             parts = line.split(",")
-            valid_parts = []  # 暂存这条行里合法的部位和伤害
+            temp_events = [] 
+            is_valid_line = True
             
             for part in parts:
                 if ":" not in part:
@@ -113,9 +113,9 @@ def analyze_damage_log(lines):
                     continue
  
                 armor_map = {"F": "front", "L": "left", "R": "right"}
-                valid_parts.append((armor_map[key], int(val)))
+                temp_events.append((armor_map[key], int(val)))
 
-            for armor, damage in valid_parts:
+            for armor, damage in temp_events:
                 total += damage
                 by_armor[armor] += damage
                 event_count += 1

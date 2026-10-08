@@ -432,59 +432,75 @@ def decide(sensor, state, hp, heat):
 from collections import deque
 
 def run_patrol(grid, max_steps=500):
+    # 初始化统计与状态
     steps = 0
     collisions_before = grid.collision_count
     visited = {grid.current_pos}
 
-# 辅助函数：获取当前朝向的下一个位置
-    def get_right(facing):
-        order = [Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT]
-        return order[(order.index(facing) + 1) % 4]
+    directions = (Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT)
+    escape_path = deque()
 
-    def get_left(facing):
-        order = [Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT]
-        return order[(order.index(facing) - 1) % 4]
+    # 内部 BFS 寻路函数
+    def find_path(start, target):
+        queue = deque([start])
+        previous = {start: None}
 
-    while steps < max_steps:
-    #终止条件检查
-        if grid.found_enemy:
-            break
-        if grid.fuel <= 0:
-            break
+        while queue:
+            position = queue.popleft()
+            if position == target:
+                break
+            for direction in directions:
+                dx, dy = direction.delta
+                next_position = (position[0] + dx, position[1] + dy)
+                if (next_position in previous
+                        or grid.is_blocked(*next_position)):
+                    continue
+                previous[next_position] = (position, direction)
+                queue.append(next_position)
 
-        # 感知与决策
+        if target not in previous:
+            return []
+
+        path = []
+        position = target
+        while position != start:
+            position, direction = previous[position]
+            path.append(direction)
+        path.reverse()
+        return path
+
+    # 主循环（同时检查步数、电量和是否到达终点）
+    while (steps < max_steps and grid.fuel > 0
+           and not grid.found_enemy):
+        position = grid.current_pos
         target = grid.enemy_pos
-        pos = grid.current_pos
-        obstacles = grid.obstacles
 
-        next_dir = next_step_toward(pos, target, obstacles, grid.facing)
+        # 调用 Q4 贪心导航，算出下一步方向
+        next_direction = next_step_toward(
+            position, target, grid.obstacles, grid.facing
+        )
+        next_position = (
+            position[0] + next_direction.delta[0],
+            position[1] + next_direction.delta[1],
+        )
 
-        # 脱困策略
-        if next_dir == grid.facing:
-        # 右手法则：右 -> 直 -> 左 -> 掉头
-            right_f = get_right(grid.facing)
-            right_pos = (pos[0] + right_f.delta[0], pos[1] + right_f.delta[1])
+        # 如果贪心导航被阻挡，尝试 BFS 寻路
+        if not escape_path and (
+                next_direction == grid.facing
+                or grid.is_blocked(*next_position)):
+            escape_path.extend(find_path(position, target))
 
-            straight_pos = (pos[0] + grid.facing.delta[0], pos[1] + grid.facing.delta[1])
+        # 如果有逃生路径就优先使用；否则继续贪心导航
+        if escape_path:
+            next_direction = escape_path.popleft()
+        elif next_direction == grid.facing or grid.is_blocked(*next_position):
+            break
 
-            left_f = get_left(grid.facing)
-            left_pos = (pos[0] + left_f.delta[0], pos[1] + left_f.delta[1])
-
-        # 用 grid.is_blocked 检查四个方向，找到第一个能走的
-            if not grid.is_blocked(right_pos[0], right_pos[1]):
-                next_dir = right_f       # 右边能走，转右
-            elif not grid.is_blocked(straight_pos[0], straight_pos[1]):
-                next_dir = grid.facing   # 直走能走，直走
-            elif not grid.is_blocked(left_pos[0], left_pos[1]):
-                next_dir = left_f        # 左边能走，转左
-            else:
-                next_dir = get_left(get_left(grid.facing)) # 四面楚歌，只能掉头
-
-        # 行动
-        while grid.facing != next_dir:
+        # 原地对齐朝向
+        while grid.facing != next_direction:
             grid.turn_right()
 
-        # 执行移动并更新统计
+        # 执行移动
         grid.move_forward()
         steps += 1
         visited.add(grid.current_pos)
@@ -507,6 +523,9 @@ def report_to_json(stats):
     # sort_keys=True 保证键的顺序一致，ensure_ascii=False 保留非 ASCII 字符
     return json.dumps(stats, sort_keys=True, ensure_ascii=False)
 
+# ---------------------------------------------------------------------------
+# Bonus：BFS 全局最短路（题面 Bonus·BFS 语义与排行榜）
+# ---------------------------------------------------------------------------
 def bfs_path_length(start, target, obstacles):
     if start == target:
         return 0
@@ -530,19 +549,12 @@ def bfs_path_length(start, target, obstacles):
 
     return -1  # 不可达
 
-# ---------------------------------------------------------------------------
-# Bonus：BFS 全局最短路（题面 Bonus·BFS 语义与排行榜）
-# ---------------------------------------------------------------------------
-def bfs_path_length(start, target, obstacles):
-    """TODO(Bonus): BFS 全局最短路步数；返回语义与边界职责见题面 Bonus 规范。"""
-    raise NotImplementedError("Bonus bfs_path_length")
-
 
 # ---------------------------------------------------------------------------
 # 渲染（已提供，demo 专用，不进测试）
 # ---------------------------------------------------------------------------
 def render_frame(grid, trail=()):
-    """ASCII 渲染一帧战场；trail 为走过的格子集合。返回 list[str]。"""
+    """ASCII 渲染一帧战场; trail 为走过的格子集合。返回 list[str]。"""
     trail = set(trail)
     rows = []
     for y in range(grid.height - 1, -1, -1):

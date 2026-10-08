@@ -60,12 +60,11 @@ def status_report(name, robot_type, hp, max_hp, battery):
 import json
 
 def analyze_damage_log(lines):
-
     # 初始化统计变量
     total = 0
     by_armor = {"front": 0, "left": 0, "right": 0}
-    seen_ids = set()  #记录已经出现过的id，避免重复计数
-    event_count = 0   #记录有效事件的数量
+    seen_ids = set()  # 记录已经出现过的id，避免重复计数
+    event_count = 0   # 记录有效事件的数量
     sensor_armor = {"F": "front", "L": "left", "R": "right"}
 
     def reject_json_constant(value):
@@ -76,6 +75,7 @@ def analyze_damage_log(lines):
     except Exception:
         line_iterator = iter(())
 
+    # 主循环
     while True:
         try:
             raw_line = next(line_iterator)

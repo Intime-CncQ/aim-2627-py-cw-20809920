@@ -29,7 +29,8 @@ def total_route_meters(points):
     points 为检查点序列 [(x, y), ...]，至少两个点。"""
     distance_in_meters = 0
     for i in range(len(points) - 1):
-        distance_in_meters += segment_length_cm(points[i], points[i + 1]) // 100
+        distance_in_meters += segment_length_cm(
+            points[i], points[i + 1]) // 100
     return distance_in_meters
 
 

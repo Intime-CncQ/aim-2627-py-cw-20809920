@@ -10,6 +10,7 @@
   CI 一开始就是绿的；实现一个，对应测试亮一个。
 - `python main.py`（或 PYTHONPATH=src python -m main）可看 ASCII 演示。
 """
+from collections import deque
 import json
 from enum import Enum
 
@@ -43,6 +44,8 @@ def hp_ratio(hp, max_hp):
     return int(max(0, min(100, round(ratio))))
 
 # 生成自检报告
+
+
 def status_report(name, robot_type, hp, max_hp, battery):
     hp_percent = hp_ratio(hp, max_hp)
     if battery < 20:
@@ -54,10 +57,11 @@ def status_report(name, robot_type, hp, max_hp, battery):
     return (f"{name:<10}|{robot_type:^10}|HP {hp_percent:>3}%"
             f"|BAT {battery:>3}%|{battery_status}")
 
+
 # ---------------------------------------------------------------------------
 # Q2 战斗日志分析（题面 Q2·多源日志解析与统计）
 # ---------------------------------------------------------------------------
-import json
+
 
 def analyze_damage_log(lines):
     # 初始化统计变量
@@ -90,7 +94,7 @@ def analyze_damage_log(lines):
         if not line or line.startswith("#"):
             continue
 
-    # 处理 JSON 格式的行
+        # 处理 JSON 格式的行
         if line.startswith("{"):
             try:
                 data = json.loads(line, parse_constant=reject_json_constant)
@@ -350,7 +354,7 @@ class SentryState(Enum):
 
 def decide(sensor, state, hp, heat):
 
-    #非法输入检查
+    # 非法输入检查
     if not isinstance(sensor, dict):
         raise ValueError("sensor 必须是字典")
     required_fields = ["enemy_frames", "enemy_dist", "robot_type", "max_hp"]
@@ -364,9 +368,9 @@ def decide(sensor, state, hp, heat):
     if not isinstance(state, SentryState):
         raise ValueError("state 必须为 SentryState 成员")
 
-    #输入规范化
+    # 输入规范化
     frames = [bool(x) for x in enemy_frames]
-    visible = frames[-1] 
+    visible = frames[-1]
 
     enemy_dist = sensor["enemy_dist"]
     if isinstance(enemy_dist, bool) or not isinstance(enemy_dist, int):
@@ -381,11 +385,11 @@ def decide(sensor, state, hp, heat):
         max_hp = 100
 
     if isinstance(hp, bool) or not isinstance(hp, (int, float)):
-        hp = 0    
+        hp = 0
     hp_pct = int((hp * 100) // max_hp)
     hp_pct = max(0, min(100, hp_pct))
 
-    #规则 R1-R7
+    # 规则 R1-R7
     if hp_pct <= 30:
         return ("RETREAT", SentryState.RETREAT)
     if state == SentryState.RETREAT:
@@ -431,7 +435,7 @@ def decide(sensor, state, hp, heat):
 # ---------------------------------------------------------------------------
 # Q6 巡逻任务（题面 Q6·巡逻契约与验收阈值）
 # ---------------------------------------------------------------------------
-from collections import deque
+
 
 def run_patrol(grid, max_steps=500):
     # 初始化统计与状态
@@ -519,8 +523,6 @@ def run_patrol(grid, max_steps=500):
     }
 
 
-
-
 def report_to_json(stats):
     # sort_keys=True 保证键的顺序一致，ensure_ascii=False 保留非 ASCII 字符
     return json.dumps(stats, sort_keys=True, ensure_ascii=False)
@@ -528,6 +530,8 @@ def report_to_json(stats):
 # ---------------------------------------------------------------------------
 # Bonus：BFS 全局最短路（题面 Bonus·BFS 语义与排行榜）
 # ---------------------------------------------------------------------------
+
+
 def bfs_path_length(start, target, obstacles):
     if start == target:
         return 0

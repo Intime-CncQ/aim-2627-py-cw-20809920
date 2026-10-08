@@ -271,16 +271,20 @@ class SentryGrid:
         if self._fuel <= 0:
             return self._pos
 
+        # 无论是否撞墙，只要尝试前进就消耗 1 单位电量
+        self._fuel -= 1
+
         dx, dy = self._facing.delta
         nx = self._pos[0] + dx
         ny = self._pos[1] + dy
 
+        # 前方格为障碍，判定为碰撞
         if self.is_blocked(nx, ny):
             self._collision_count += 1
             return self._pos
 
+        # 前方格可行，更新位置
         self._pos = (nx, ny)
-        self._fuel -= 1
         return self._pos
 
     def turn_left(self):

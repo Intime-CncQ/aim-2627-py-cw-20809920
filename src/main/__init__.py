@@ -34,23 +34,25 @@ class Facing(Enum):
 # ---------------------------------------------------------------------------
 # Q1 机器人自检（题面 Q1·自检状态计算与报告生成）
 # ---------------------------------------------------------------------------
+
+# 计算血量百分比
 def hp_ratio(hp, max_hp):
     if max_hp <= 0:
         return 0
     ratio = (hp * 100) / max_hp
     return int(max(0, min(100, round(ratio))))
 
-
+# 生成自检报告
 def status_report(name, robot_type, hp, max_hp, battery):
-    hp_pct = hp_ratio(hp, max_hp)
+    hp_percent = hp_ratio(hp, max_hp)
     if battery < 20:
         battery_status = "LOW"
     elif battery < 60:
         battery_status = "WARNING"
     else:
         battery_status = "OK"
-    return (f"{name:<10}| {robot_type} |HP {hp_pct:>3}%|"
-            f"BAT {battery:>3}%|{battery_status}")
+    return (f"{name:<10}|{robot_type:^10}|HP {hp_percent:>3}%"
+            f"|BAT {battery:>3}%|{battery_status}")
 
 # ---------------------------------------------------------------------------
 # Q2 战斗日志分析（题面 Q2·多源日志解析与统计）

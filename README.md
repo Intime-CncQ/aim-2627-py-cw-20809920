@@ -68,3 +68,16 @@ python main.py
 
 CI 只允许修改 `src/main/**`、`README.md` 与 `.agent-sessions/**`（AI 会话归档）——其余文件改了直接红；autopep8 `--diff` 非空即败。提交方式（push、问卷、commit 粒度）见题面"提交与验收"一节。
 
+## Q7  设计决策与踩坑记录
+
+1. 第一个定义中 segment_length_cm 返回的是厘米，但是第二个定义中 total_route_meters返回的是米，单位没有统一。需要在累加之后除以100，以保证单位都统一成米
+
+2. 当样本里面没有正整数的时候，first_positive 会返回 None，当前循环在计算 s-baseline时就会崩溃。需要让 calibrate 在基线不存在时直接返回0，加 baseline is None 判断
+
+3. 3与2相关联。规范要求统计 id 不超过 max_id 的事件，应该是小于等于，原代码漏掉了等于的边界情况。需要加上等于，即为 e["id"] <= max_id
+
+4. log 函数的可变默认参数有bug，使用可变默认参数 history=[]时，会共享列表，导致L.log("a") 和 L.log("b") 混在一起。需要把默认参数改成None，在函数内判断并初始化列表
+
+5. run_legacy_sim 的终止条件写反了，规范中说是体力小于等于20就终止，而不是大于。需要把条件改成 stamina <= 20
+
+6. 6与5相关联。run_legacy_sim 会进入死循环，round_永远不变，运行到一半就报 MemoryError。需要在循环末尾加上 round_ += 1

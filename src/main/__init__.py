@@ -45,6 +45,7 @@ def hp_ratio(hp, max_hp):
 
 # 生成自检报告
 
+
 def status_report(name, robot_type, hp, max_hp, battery):
     hp_percent = hp_ratio(hp, max_hp)
     if battery < 20:
@@ -181,7 +182,7 @@ class SentryGrid:
         self._height = int(height)
         if self._width <= 0 or self._height <= 0:
             raise ValueError("地图尺寸必须为正")
-        
+
         # 障碍坐标存入 set，查询 O(1)
         self._obstacles = set()
         for ob in obstacles:

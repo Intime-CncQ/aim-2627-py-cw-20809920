@@ -45,7 +45,6 @@ def hp_ratio(hp, max_hp):
 
 # 生成自检报告
 
-
 def status_report(name, robot_type, hp, max_hp, battery):
     hp_percent = hp_ratio(hp, max_hp)
     if battery < 20:
@@ -61,7 +60,6 @@ def status_report(name, robot_type, hp, max_hp, battery):
 # ---------------------------------------------------------------------------
 # Q2 战斗日志分析（题面 Q2·多源日志解析与统计）
 # ---------------------------------------------------------------------------
-
 
 def analyze_damage_log(lines):
     # 初始化统计变量
@@ -183,6 +181,7 @@ class SentryGrid:
         self._height = int(height)
         if self._width <= 0 or self._height <= 0:
             raise ValueError("地图尺寸必须为正")
+        
         # 障碍坐标存入 set，查询 O(1)
         self._obstacles = set()
         for ob in obstacles:
@@ -203,7 +202,6 @@ class SentryGrid:
             raise ValueError("start_pos 不能位于障碍物上")
 
     def _clamp_cell(self, cell):
-        """已提供：元素转 int 并夹回地图范围（供 __init__ 使用）。"""
         x = int(cell[0])
         y = int(cell[1])
         x = max(0, min(self._width - 1, x))
@@ -305,6 +303,7 @@ class SentryGrid:
 # ---------------------------------------------------------------------------
 # Q4 贪心导航（题面 Q4·单步贪心导航策略）
 # ---------------------------------------------------------------------------
+
 def next_step_toward(pos, target, obstacles, current_facing=Facing.UP):
     """返回下一步应朝向的 Facing。"""
     if pos == target:
@@ -314,6 +313,7 @@ def next_step_toward(pos, target, obstacles, current_facing=Facing.UP):
     tx, ty = target
     obstacles = set(obstacles)
 
+    # 内部辅助函数，判断某个方向是否合法
     def is_valid(direction):
         nx = x + direction.delta[0]
         ny = y + direction.delta[1]
@@ -321,6 +321,7 @@ def next_step_toward(pos, target, obstacles, current_facing=Facing.UP):
             return False
         return abs(nx - tx) + abs(ny - ty) < abs(x - tx) + abs(y - ty)
 
+    # 确定轴优先级
     if abs(tx - x) >= abs(ty - y):
         priority = [
             Facing.RIGHT if tx > x else Facing.LEFT,
@@ -332,10 +333,12 @@ def next_step_toward(pos, target, obstacles, current_facing=Facing.UP):
             Facing.RIGHT if tx > x else Facing.LEFT,
         ]
 
+    # 按优先级尝试候选方向
     for direction in priority:
         if is_valid(direction):
             return direction
 
+    # 兜底防线
     for direction in [Facing.UP, Facing.RIGHT, Facing.DOWN, Facing.LEFT]:
         if is_valid(direction):
             return direction
@@ -440,7 +443,6 @@ def decide(sensor, state, hp, heat):
 # Q6 巡逻任务（题面 Q6·巡逻契约与验收阈值）
 # ---------------------------------------------------------------------------
 
-
 def run_patrol(grid, max_steps=500):
     # 初始化统计与状态
     steps = 0
@@ -531,10 +533,10 @@ def report_to_json(stats):
     # sort_keys=True 保证键的顺序一致，ensure_ascii=False 保留非 ASCII 字符
     return json.dumps(stats, sort_keys=True, ensure_ascii=False)
 
+
 # ---------------------------------------------------------------------------
 # Bonus：BFS 全局最短路（题面 Bonus·BFS 语义与排行榜）
 # ---------------------------------------------------------------------------
-
 
 def bfs_path_length(start, target, obstacles):
     if start == target:
